@@ -20,6 +20,7 @@ class Window(threading.Thread):
         self.world = sf.Sprite(texture)
         self.size = texture.size
         self.window = sf.RenderWindow(sf.VideoMode(*self.size), "SelfieMap")
+        self.window.framerate_limit = 60
         self.q = Queue()
         self.objects = []
         super().__init__()
@@ -60,10 +61,6 @@ class TestDataGenerator(threading.Thread):
         downloader = SelfiesDownloader()
         downloader.daemon = True
         downloader.start()
-        r = sf.RectangleShape((100, 100))
-        r.fill_color = sf.Color(255, 255, 0, 255)
-        r.origin = 50, 50
-        w.q.put((39.746944, -105.210833, r))
         while True:
             t = sf.Texture.from_memory(downloader.q.get())
             spr = sf.Sprite(t)
