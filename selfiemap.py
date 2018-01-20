@@ -1,9 +1,12 @@
 import threading
 import random
 import time
+import requests
 from math import sin, pi, cos
 from sfml import sf
 from queue import Queue, Empty
+
+images_url = 'https://inmotion.adrivo.com/images/300/uploads/user/fcb/{}_preview.jpg'
 
 def latpx(lat, scale):
     return (-lat + 90) / 180 * scale
@@ -54,18 +57,36 @@ class TestDataGenerator(threading.Thread):
         super().__init__()
 
     def run(self):
+        downloader = SelfiesDownloader()
+        downloader.daemon = True
+        downloader.start()
         r = sf.RectangleShape((100, 100))
         r.fill_color = sf.Color(255, 255, 0, 255)
         r.origin = 50, 50
         w.q.put((39.746944, -105.210833, r))
         while True:
+            t = sf.Texture.from_memory(downloader.q.get())
+            spr = sf.Sprite(t)
+            spr.origin = (x/2 for x in t.size)
             time.sleep(random.expovariate(10))
-            r = sf.RectangleShape((100, 100))
-            r.fill_color = sf.Color(*([random.randint(0, 255) for _ in range(3)] + [255]))
-            r.origin = 50, 50
-            w.q.put((random.uniform(-90, 90), random.uniform(-180, 180), r))
+            w.q.put((random.uniform(-90, 90), random.uniform(-180, 180), spr))
+
+class SelfiesDownloader(threading.Thread):
+    def __init__(self):
+        self.q = Queue()
+        super().__init__()
+
+    def run(self):
+        while True:
+            r = requests.get(images_url.format(random.choice(selfie_bits)))
+            if not r.ok:
+                print("WARNING: failed to download {}, HTTP Error {}".format(r.url, r.status_code))
+                continue
+            self.q.put(r.content)
 
 if __name__ == '__main__':
+    with open('data/images.lst') as f:
+        selfie_bits = f.read().splitlines()
     w = Window()
     w.start()
     g = TestDataGenerator(w)
