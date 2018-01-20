@@ -9,22 +9,31 @@ from collections import defaultdict
 
 images_url = 'https://inmotion.adrivo.com/images/300/uploads/user/fcb/{}_preview.jpg'
 
-def latpx(lat, scale):
-    return (-lat + 90) / 180 * scale
-
-def lonpx(lon, scale):
-    return (lon + 180) / 360 * scale
-
 class Window(threading.Thread):
     def __init__(self):
-        texture = sf.Texture.from_file("map.png")
-        self.world = sf.Sprite(texture)
-        self.size = texture.size
-        self.window = sf.RenderWindow(sf.VideoMode(*self.size), "SelfieMap")
+        self.texture = sf.Texture.from_file("map.png")
+        self.world = sf.Sprite(self.texture)
+        self.video_mode = sf.VideoMode.get_fullscreen_modes()[0]
+        vm_size = self.video_mode.width, self.video_mode.height
+        self.world.origin = (c / 2 for c in self.texture.size)
+        self.world.position = (c / 2 for c in vm_size)
+        self.world.ratio = (min(v / t for t, v in zip(self.texture.size, vm_size)) ,) * 2
+        self.original_ratio = self.world.ratio.x
+        self.window = sf.RenderWindow(self.video_mode, "FanMap")
         self.window.framerate_limit = 60
         self.q = Queue()
         self.objects = []
         super().__init__()
+
+    def win_to_lcoord(self, winc):
+        gb = self.world.global_bounds
+        return ((scrn - world) / self.world.ratio.x
+                for scrn, world in zip(winc, (gb.left, gb.top)))
+
+    def lcoord_to_win(self, lc):
+        gb = self.world.global_bounds
+        return (l * self.world.ratio.x + world
+                for l, world in zip(lc, (gb.left, gb.top)))
 
     def run(self):
         while self.window.is_open:
@@ -33,15 +42,24 @@ class Window(threading.Thread):
                     self.window.close()
                 if event.type == event.KEY_PRESSED and event['code'] == 16:
                     self.window.close()
+                if ((event.type == event.KEY_PRESSED and event['code'] == sf.Keyboard.SPACE)
+                    or (event.type == event.MOUSE_BUTTON_PRESSED and event['button'] == 1)):
+                    self.world.ratio = (x / 2 for x in self.world.ratio)
+                    if self.world.ratio.x <= self.original_ratio:
+                        self.world.origin = (c / 2 for c in self.texture.size)
+                if event.type == event.MOUSE_BUTTON_PRESSED and event['button'] == 0:
+                    point = event['x'], event['y']
+                    if self.world.global_bounds.contains(point):
+                        self.world.origin = self.win_to_lcoord(point)
+                    self.world.ratio = (x * 2 for x in self.world.ratio)
             self.window.clear()
             self.window.draw(self.world)
             while True:
                 try:
                     lati, longi, obj = self.q.get_nowait()
-                    obj.position = (
-                        f(c, s) for f, c, s in zip((lonpx, latpx),
-                                                   (longi, lati),
-                                                   tuple(self.size))
+                    obj.position = self.lcoord_to_win(
+                            f(c) for f, c in zip((self.lonpx, self.latpx),
+                                                (longi, lati))
                     )
                     self.objects.append((obj, 0))
                 except Empty:
@@ -52,6 +70,12 @@ class Window(threading.Thread):
                 self.window.draw(obj)
             self.objects = [(o, c + 1) for o, c in self.objects if c < 200]
             self.window.display()
+
+    def latpx(self, lat):
+        return (-lat + 90) / 180 * self.texture.size.y
+
+    def lonpx(self, lon):
+        return (lon + 180) / 360 * self.texture.size.x
 
 class TestDataGenerator(threading.Thread):
     def __init__(self, w):
@@ -101,6 +125,8 @@ class SelfiesDownloader(threading.Thread):
             self.q.put(tuple(selfie[:-1]) + (r.content, ))
 
 if __name__ == '__main__':
+    w = Window()
+    w.start()
     with open('data/images.csv') as f:
         selfie_data = [l.split(',') for l in f.read().splitlines()]
     cities = defaultdict(dict)
@@ -109,8 +135,6 @@ if __name__ == '__main__':
             code, unaccent, accent, _, _, lati, longi = line.split(',')
             for name in unaccent, accent:
                 cities[code.casefold()][name.casefold()] = tuple(map(float, (lati, longi)))
-    w = Window()
-    w.start()
     g = TestDataGenerator(w)
     g.daemon = True
     g.start()
