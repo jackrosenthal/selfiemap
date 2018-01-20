@@ -5,6 +5,7 @@ import requests
 from math import sin, pi, cos
 from sfml import sf
 from queue import Queue, Empty
+from collections import defaultdict
 
 images_url = 'https://inmotion.adrivo.com/images/300/uploads/user/fcb/{}_preview.jpg'
 
@@ -62,11 +63,24 @@ class TestDataGenerator(threading.Thread):
         downloader.daemon = True
         downloader.start()
         while True:
-            t = sf.Texture.from_memory(downloader.q.get())
+            name, code, city, selfie = downloader.q.get()
+            code = code.casefold()
+            city = city.casefold()
+            t = sf.Texture.from_memory(selfie)
             spr = sf.Sprite(t)
             spr.origin = (x/2 for x in t.size)
-            time.sleep(random.expovariate(10))
-            w.q.put((random.uniform(-90, 90), random.uniform(-180, 180), spr))
+            time.sleep(random.expovariate(1))
+            try:
+                coord = cities[code][city]
+            except KeyError:
+                print("WARNING: I don't quite know where {}/{} is...".format(
+                    code, city
+                ))
+                if cities.get(code):
+                    coord = random.choice(list(cities.get(code).values()))
+                else:
+                    coord = (random.uniform(-90, 90), random.uniform(-180, 180))
+            w.q.put(coord + (spr, ))
 
 class SelfiesDownloader(threading.Thread):
     def __init__(self):
@@ -75,15 +89,26 @@ class SelfiesDownloader(threading.Thread):
 
     def run(self):
         while True:
-            r = requests.get(images_url.format(random.choice(selfie_bits)))
+            selfie = random.choice(selfie_data)
+            try:
+                r = requests.get(images_url.format(selfie[3]))
+            except requests.exceptions.ConnectionError:
+                print("WARNING: connection error")
+                continue
             if not r.ok:
                 print("WARNING: failed to download {}, HTTP Error {}".format(r.url, r.status_code))
                 continue
-            self.q.put(r.content)
+            self.q.put(tuple(selfie[:-1]) + (r.content, ))
 
 if __name__ == '__main__':
-    with open('data/images.lst') as f:
-        selfie_bits = f.read().splitlines()
+    with open('data/images.csv') as f:
+        selfie_data = [l.split(',') for l in f.read().splitlines()]
+    cities = defaultdict(dict)
+    with open('data/cities.csv') as f:
+        for line in f:
+            code, unaccent, accent, _, _, lati, longi = line.split(',')
+            for name in unaccent, accent:
+                cities[code.casefold()][name.casefold()] = tuple(map(float, (lati, longi)))
     w = Window()
     w.start()
     g = TestDataGenerator(w)
