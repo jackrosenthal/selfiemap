@@ -11,8 +11,10 @@ images_url = 'https://inmotion.adrivo.com/images/300/uploads/user/fcb/{}_preview
 
 class Window(threading.Thread):
     def __init__(self):
-        self.done_loading = False
-        self.texture = sf.Texture.from_file("data/world.topo.bathy.200401.3x16384.png")
+        self.loading_text = sf.Text('Initializing...')
+        self.loading_text.character_size = 64
+        self.loading_text.font = sf.Font.from_file('loading.ttf')
+        self.texture = sf.Texture.from_file("data/world16384.png")
         self.world = sf.Sprite(self.texture)
         self.video_mode = sf.VideoMode.get_fullscreen_modes()[0]
         vm_size = self.video_mode.width, self.video_mode.height
@@ -21,15 +23,20 @@ class Window(threading.Thread):
         self.world.ratio = (min(v / t for t, v in zip(self.texture.size, vm_size)) ,) * 2
         self.original_ratio = self.world.ratio.x
         self.fc_logo = sf.Sprite(sf.Texture.from_file("fcbayern.png"))
-        self.fc_logo.origin = 200, 200
-        self.fc_logo.position = (c / 2 for c in vm_size)
+        self.fc_logo.origin = 200, 400
+        self.fc_logo.position = vm_size[0] / 2, vm_size[1] / 2 - 30
+        self.loading_text.position = vm_size[0] / 2, vm_size[1] / 2 + 30
+        self.loading_text.color = sf.Color(255, 255, 255, 255)
         self.fade = sf.RectangleShape(vm_size)
-        self.fade.fill_color = sf.Color(0, 0, 0, 127)
+        self.fade.fill_color = sf.Color(0, 0, 0, 200)
         self.fade.position = (0, 0)
         self.window = sf.RenderWindow(self.video_mode, "FanMap")
         self.window.framerate_limit = 60
         self.q = Queue()
         self.objects = []
+        self.zoomt = -1
+        self.zoomdirec = 0
+        self.target_origin = self.world.origin
         super().__init__()
 
     def win_to_lcoord(self, winc):
@@ -44,6 +51,16 @@ class Window(threading.Thread):
 
     def run(self):
         while self.window.is_open:
+            self.world.origin = ((0.5 * t + 1.5 * z)/2 for t, z in zip(self.target_origin, self.world.origin))
+            if self.zoomt >= 0:
+                self.zoomt += 1
+                df = self.zoomdirec * 0.006 * sin(pi / 200 * self.zoomt + pi/2)
+                self.world.ratio = (x + df for x in self.world.ratio)
+                if self.world.ratio.x <= 0.5*self.original_ratio:
+                    self.zoomt = -1
+                    continue
+                if self.zoomt == 100:
+                    self.zoomt = -1
             for event in self.window.events:
                 if event.type == event.CLOSED:
                     self.window.close()
@@ -51,19 +68,24 @@ class Window(threading.Thread):
                     self.window.close()
                 if ((event.type == event.KEY_PRESSED and event['code'] == sf.Keyboard.SPACE)
                     or (event.type == event.MOUSE_BUTTON_PRESSED and event['button'] == 1)):
-                    self.world.ratio = (x / 2 for x in self.world.ratio)
+                    self.zoomdirec = -1
+                    self.zoomt = 0
                     if self.world.ratio.x <= self.original_ratio:
-                        self.world.origin = (c / 2 for c in self.texture.size)
+                        self.target_origin = tuple(c / 2 for c in self.texture.size)
                 if event.type == event.MOUSE_BUTTON_PRESSED and event['button'] == 0:
+                    self.zoomdirec = 1
                     point = event['x'], event['y']
                     if self.world.global_bounds.contains(point):
-                        self.world.origin = self.win_to_lcoord(point)
-                    self.world.ratio = (x * 2 for x in self.world.ratio)
+                        self.target_origin = tuple(self.win_to_lcoord(point))
+                    self.zoomdirec = 1
+                    self.zoomt = 0
             self.window.clear()
             self.window.draw(self.world)
-            if not self.done_loading:
+            if self.loading_text.string:
                 self.window.draw(self.fade)
-                self.fc_logo.rotation = (self.fc_logo.rotation + 1) % 360
+                lb = self.loading_text.local_bounds
+                self.loading_text.origin = lb.width / 2, lb.height / 2
+                self.window.draw(self.loading_text)
                 self.window.draw(self.fc_logo)
             else:
                 while True:
@@ -141,14 +163,16 @@ class DataLoader(threading.Thread):
         global selfie_data
         global cities
         cities = defaultdict(dict)
+        w.loading_text.string = 'Loading Test Data...'
         with open('data/images.csv') as f:
             selfie_data = [l.split(',') for l in f.read().splitlines()]
+        w.loading_text.string = 'Loading City Data...'
         with open('data/cities.csv') as f:
             for line in f:
                 code, unaccent, accent, _, _, lati, longi = line.split(',')
                 for name in unaccent, accent:
                     cities[code.casefold()][name.casefold()] = tuple(map(float, (lati, longi)))
-        w.done_loading = True
+        w.loading_text.string = ''
 
 if __name__ == '__main__':
     w = Window()
