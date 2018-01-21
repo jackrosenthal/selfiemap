@@ -12,7 +12,7 @@ images_url = 'https://inmotion.adrivo.com/images/300/uploads/user/fcb/{}_preview
 class Window(threading.Thread):
     def __init__(self):
         self.done_loading = False
-        self.texture = sf.Texture.from_file("map.png")
+        self.texture = sf.Texture.from_file("data/world.topo.bathy.200401.3x16384.png")
         self.world = sf.Sprite(self.texture)
         self.video_mode = sf.VideoMode.get_fullscreen_modes()[0]
         vm_size = self.video_mode.width, self.video_mode.height
