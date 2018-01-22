@@ -1,5 +1,5 @@
 DATAFILES = $(basename $(wildcard data/*.xz))
-MAPFILES = $(patsubst %,data/world.topo.bathy.200401.3x%.png, 5400x2700 21600x10800) data/world16384.png
+MAPFILES = $(patsubst %,data/world.topo.bathy.200401.3x%.png, 21600x10800) data/world16384.png
 
 all: $(DATAFILES) $(MAPFILES)
 
