@@ -58,7 +58,7 @@ class Window(threading.Thread):
             self.world.origin = ((0.5 * t + 1.5 * z)/2 for t, z in zip(self.target_origin, self.world.origin))
             if self.zoomt >= 0:
                 self.zoomt += 1
-                df = self.zoomdirec * 0.006 * sin(pi / 200 * self.zoomt + pi/2)
+                df = self.zoomdirec * 0.001 * (self.world.ratio.x / self.original_ratio) * sin(pi / 200 * self.zoomt + pi/2)
                 self.world.ratio = (x + df for x in self.world.ratio)
                 if self.world.ratio.x <= 0.5*self.original_ratio:
                     self.zoomt = -1
