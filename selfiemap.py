@@ -2,6 +2,7 @@ import threading
 import random
 import time
 import requests
+import bottle
 from math import sin, pi, cos
 from sfml import sf
 from queue import Queue, Empty
@@ -25,6 +26,9 @@ class Window(threading.Thread):
         self.fc_logo = sf.Sprite(sf.Texture.from_file("fcbayern.png"))
         self.fc_logo.origin = 200, 400
         self.fc_logo.position = vm_size[0] / 2, vm_size[1] / 2 - 30
+        self.dhl = sf.Sprite(sf.Texture.from_file("globalfamily.png"))
+        self.dhl.origin = self.dhl.texture.size
+        self.dhl.position = (x - 60 for x in vm_size)
         self.loading_text.position = vm_size[0] / 2, vm_size[1] / 2 + 30
         self.loading_text.color = sf.Color(255, 255, 255, 255)
         self.fade = sf.RectangleShape(vm_size)
@@ -81,6 +85,7 @@ class Window(threading.Thread):
                     self.zoomt = 0
             self.window.clear()
             self.window.draw(self.world)
+            self.window.draw(self.dhl)
             if self.loading_text.string:
                 self.window.draw(self.fade)
                 lb = self.loading_text.local_bounds
@@ -140,6 +145,25 @@ class TestDataGenerator(threading.Thread):
                     coord = (random.uniform(-90, 90), random.uniform(-180, 180))
             w.q.put(coord + (spr, ))
 
+class BottleDataProvider(threading.Thread):
+    def __init__(self, w):
+        self.w = w
+        super().__init__()
+
+    def run(self):
+        app = bottle.app()
+
+        @app.post('/selfie')
+        def selfie():
+            r = requests.get(bottle.request.POST['image_url'])
+            gps = (48.1500, 11.5833)
+            t = sf.Texture.from_memory(r.content)
+            spr = sf.Sprite(t)
+            spr.origin = (x / 2 for x in t.size)
+            self.w.q.put(gps + (spr, ))
+
+        app.run(host='0.0.0.0', port='8080')
+
 class SelfiesDownloader(threading.Thread):
     def __init__(self):
         self.q = Queue()
@@ -180,6 +204,9 @@ if __name__ == '__main__':
     loader = DataLoader()
     loader.start()
     loader.join()
+    ws = BottleDataProvider(w)
+    ws.daemon = True
+    ws.start()
     g = TestDataGenerator(w)
     g.daemon = True
     g.start()
