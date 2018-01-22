@@ -100,14 +100,14 @@ class Window(threading.Thread):
                                 f(c) for f, c in zip((self.lonpx, self.latpx),
                                                     (longi, lati))
                         )
-                        self.objects.append((obj, 0))
+                        self.objects.append((obj, 0, obj.ratio.x))
                     except Empty:
                         break
-                for obj, clock in self.objects:
-                    scale = sin(clock/200 * pi)
+                for obj, clock, rat in self.objects:
+                    scale = rat * sin(clock/200 * pi)
                     obj.ratio = scale, scale
                     self.window.draw(obj)
-                self.objects = [(o, c + 1) for o, c in self.objects if c < 200]
+                self.objects = [(o, c + 1, rat) for o, c, rat in self.objects if c < 200]
             self.window.display()
 
     def latpx(self, lat):
@@ -159,6 +159,7 @@ class BottleDataProvider(threading.Thread):
             gps = (48.1500, 11.5833)
             t = sf.Texture.from_memory(r.content)
             spr = sf.Sprite(t)
+            spr.ratio = 0.1, 0.1
             spr.origin = (x / 2 for x in t.size)
             self.w.q.put(gps + (spr, ))
 
